@@ -59,7 +59,7 @@ spec:
         - name: amlitp-secret
       containers:
         - name: alluxio-master
-          image: ALLUXIO_DOCKER_IMAGE
+          image: alluxio/alluxio:2.6.2
           # image: amlitpcloudreg.azurecr.io/cwan/alluxio:dbg
           imagePullPolicy: Always
           securityContext:
@@ -103,7 +103,7 @@ spec:
             - name: alluxio-journal
               mountPath: /journal
         - name: alluxio-job-master
-          image: ALLUXIO_DOCKER_IMAGE
+          image: alluxio/alluxio:2.6.2
           # image: amlitpcloudreg.azurecr.io/cwan/alluxio:dbg
           imagePullPolicy: Always
           securityContext:

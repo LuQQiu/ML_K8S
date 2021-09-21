@@ -58,7 +58,7 @@ spec:
         - name: amlitp-secret
       containers:
         - name: alluxio-worker
-          image: ALLUXIO_DOCKER_IMAGE
+          image: alluxio/alluxio:2.6.2
           # image: amlitpcloudreg.azurecr.io/cwan/alluxio:dbg
           imagePullPolicy: Always
           securityContext:
@@ -121,7 +121,7 @@ spec:
               mountPath: /mnt
               mountPropagation: Bidirectional
         - name: alluxio-job-worker
-          image: ALLUXIO_DOCKER_IMAGE
+          image: alluxio/alluxio:2.6.2
           # image: amlitpcloudreg.azurecr.io/cwan/alluxio:dbg
           securityContext:
             runAsUser: 1000
