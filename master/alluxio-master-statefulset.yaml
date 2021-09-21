@@ -1,0 +1,151 @@
+---
+# Source: alluxio/templates/master/statefulset.yaml
+#
+# The Alluxio Open Foundation licenses this work under the Apache License, version 2.0
+# (the "License"). You may not use this work except in compliance with the License, which is
+# available at www.apache.org/licenses/LICENSE-2.0
+#
+# This software is distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied, as more fully set forth in the License.
+#
+# See the NOTICE file distributed with this work for information regarding copyright ownership.
+#
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: alluxio-master
+  labels:
+    name: alluxio-master
+    app: alluxio
+    chart: alluxio-0.6.5
+    release: alluxio
+    heritage: Helm
+    role: alluxio-master
+spec:
+  selector:
+    matchLabels:
+      app: alluxio
+      role: alluxio-master
+      name: alluxio-master
+  serviceName: alluxio-master
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        name: alluxio-master
+        app: alluxio
+        chart: alluxio-0.6.5
+        release: alluxio
+        heritage: Helm
+        role: alluxio-master
+    spec:
+      hostNetwork: false
+      dnsPolicy: ClusterFirst
+      nodeSelector:
+        alluxio-master: "true"
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: alluxio-journal-setup
+          image: bash
+          securityContext:
+            privileged: true
+          command: ["bash", "-c", "chmod a+w /journal"]
+          volumeMounts:
+            - name: alluxio-journal
+              mountPath: /journal    
+      imagePullSecrets:
+        - name: amlitp-secret
+      containers:
+        - name: alluxio-master
+          image: ALLUXIO_DOCKER_IMAGE
+          # image: amlitpcloudreg.azurecr.io/cwan/alluxio:dbg
+          imagePullPolicy: Always
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          resources:
+            limits:
+              cpu: 6
+              memory: 52G
+            requests:
+              cpu: 6
+              memory: 52G
+          command: ["/entrypoint.sh"]
+          args:
+            - master-only
+            - --no-format
+          env:
+          - name: ALLUXIO_MASTER_HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          envFrom:
+          - configMapRef:
+              name: alluxio-config
+          readinessProbe:
+            exec:
+              command: ["alluxio-monitor.sh", "master"]
+          livenessProbe:
+            exec:
+              command: ["alluxio-monitor.sh", "master"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 2
+          ports:
+          - containerPort: 19998
+            name: rpc
+          - containerPort: 19999
+            name: web
+          volumeMounts:
+            - name: alluxio-journal
+              mountPath: /journal
+        - name: alluxio-job-master
+          image: ALLUXIO_DOCKER_IMAGE
+          # image: amlitpcloudreg.azurecr.io/cwan/alluxio:dbg
+          imagePullPolicy: Always
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          resources:
+            limits:
+              cpu: 4
+              memory: 16G
+            requests:
+              cpu: 4
+              memory: 16G
+          command: ["/entrypoint.sh"]
+          args:
+            - job-master
+          env:
+          - name: ALLUXIO_MASTER_HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          envFrom:
+          - configMapRef:
+              name: alluxio-config
+          readinessProbe:
+            exec:
+              command: ["alluxio-monitor.sh", "job_master"]
+          livenessProbe:
+            exec:
+              command: ["alluxio-monitor.sh", "job_master"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 2
+          ports:
+          - containerPort: 20001
+            name: job-rpc
+          - containerPort: 20002
+            name: job-web
+          volumeMounts:
+      restartPolicy: Always
+      volumes:
+      - name: alluxio-journal
+        hostPath:
+          path: /alluxio/journal
+          type: DirectoryOrCreate

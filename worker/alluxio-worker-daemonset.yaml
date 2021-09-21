@@ -1,0 +1,185 @@
+---
+# Source: alluxio/templates/worker/daemonset.yaml
+#
+# The Alluxio Open Foundation licenses this work under the Apache License, version 2.0
+# (the "License"). You may not use this work except in compliance with the License, which is
+# available at www.apache.org/licenses/LICENSE-2.0
+#
+# This software is distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied, as more fully set forth in the License.
+#
+# See the NOTICE file distributed with this work for information regarding copyright ownership.
+#
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: alluxio-worker
+  labels:
+    app: alluxio
+    chart: alluxio-0.6.5
+    release: alluxio
+    heritage: Helm
+    role: alluxio-worker
+spec:
+  selector:
+    matchLabels:
+      app: alluxio
+      release: alluxio
+      role: alluxio-worker
+  template:
+    metadata:
+      labels:
+        app: alluxio
+        chart: alluxio-0.6.5
+        release: alluxio
+        heritage: Helm
+        role: alluxio-worker
+    spec:
+      hostNetwork: true
+      hostPID: true
+      dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
+      nodeSelector:
+        alluxio-master: "false"
+      initContainers:
+        - name: alluxio-domain-socket-setup
+          image: bash
+          securityContext:
+            privileged: true
+          command: ["bash", "-c", "chmod a+w /alluxio-cache-ssd"]
+          volumeMounts:
+            - name: alluxio-ssd
+              mountPath: /alluxio-cache-ssd
+      imagePullSecrets:
+        - name: amlitp-secret
+      containers:
+        - name: alluxio-worker
+          image: ALLUXIO_DOCKER_IMAGE
+          # image: amlitpcloudreg.azurecr.io/cwan/alluxio:dbg
+          imagePullPolicy: Always
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+                - SYS_ADMIN
+          resources:
+            limits:
+              cpu: 6
+              memory: 24G
+            requests:
+              cpu: 6
+              memory: 24G
+          command: ["/entrypoint.sh"]
+          args:
+            - worker-only
+            - --no-format
+          env:
+          - name: ALLUXIO_WORKER_HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          - name: ALLUXIO_WORKER_CONTAINER_HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: ALLUXIO_CLIENT_HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          - name: "MAX_IDLE_THREADS"
+            value: "64"
+          - name: "SPENT_TIME"
+            value: "1000"
+          envFrom:
+          - configMapRef:
+              name: alluxio-config
+          readinessProbe:
+            exec:
+              command: ["alluxio-monitor.sh", "worker"]
+          livenessProbe:
+            exec:
+              command: ["alluxio-monitor.sh", "worker"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 2
+          ports:
+          - containerPort: 29999
+            name: rpc
+          - containerPort: 30000
+            name: web
+          volumeMounts:
+            - name: alluxio-ssd
+              mountPath: /alluxio-cache-ssd
+            - name: alluxio-fuse-device
+              mountPath: /dev/fuse
+            - name: alluxio-fuse-mount
+              mountPath: /mnt
+              mountPropagation: Bidirectional
+        - name: alluxio-job-worker
+          image: ALLUXIO_DOCKER_IMAGE
+          # image: amlitpcloudreg.azurecr.io/cwan/alluxio:dbg
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+          imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: 2
+              memory: 8G
+            requests:
+              cpu: 2
+              memory: 8G
+          command: ["/entrypoint.sh"]
+          args:
+            - job-worker
+          env:
+          - name: ALLUXIO_WORKER_HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+          - name: ALLUXIO_WORKER_CONTAINER_HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          envFrom:
+          - configMapRef:
+              name: alluxio-config
+          readinessProbe:
+            exec:
+              command: ["alluxio-monitor.sh", "job_worker"]
+          livenessProbe:
+            exec:
+              command: ["alluxio-monitor.sh", "job_worker"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 2
+          ports:
+          - containerPort: 30001
+            name: job-rpc
+          - containerPort: 30002
+            name: job-data
+          - containerPort: 30003
+            name: job-web
+          volumeMounts:
+            - name: alluxio-ssd
+              mountPath: /alluxio-cache-ssd     
+      restartPolicy: Always
+      volumes:
+        - name: alluxio-ssd
+          hostPath:
+            path: /alluxio/alluxio-ssd
+            type: DirectoryOrCreate
+        - name: alluxio-fuse-device
+          hostPath:
+            path: /dev/fuse
+            type: File
+        - name: alluxio-fuse-mount
+          hostPath:
+            path: /alluxio/alluxio-mountpoint
+            type: DirectoryOrCreate
